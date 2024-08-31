@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON File Uploads</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/js/all.min.js"></script>
+</head>
+<body>
+
+<div class="container mt-4">
+  <div id="alerts"></div>
+  <h1 style="align-items: center; justify-content: center; display: flex;">JSON File Uploads</h1>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Number</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="dataList">
+    </tbody>
+  </table>
+  <div class="mb-3">
+    <label for="fileInput" class="form-label">Upload JSON Files</label>
+    <div class="input-group">
+      <input type="file" class="form-control-file" id="fileInput" accept=".json" multiple style="display: none;">
+      <button class="btn btn-success ml-2" onclick="document.getElementById('fileInput').click()">Upload</button>
+    </div>
+  </div>
+  <div style="align-items: right; justify-content: right; display: flex;">
+    <button class="btn btn-success ml-2" onclick="handleDownloadAll()">Download All</button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const initialDataList = [];
+    let dataList = initialDataList;
+    let isEditing = false;
+    let editedRow = null;
+    let alerts = [];
+
+    function showAlert(message, type = 'info') {
+      alerts.push({ message, type });
+      renderAlerts();
+    }
+
+    function renderAlerts() {
+      const alertsContainer = document.getElementById('alerts');
+      alertsContainer.innerHTML = '';
+      alerts.forEach((alert, index) => {
+        const alertDiv = document.createElement('div');
+        alertDiv.classList.add('alert', `alert-${alert.type}`, 'alert-dismissible', 'fade', 'show');
+        alertDiv.setAttribute('role', 'alert');
+        alertDiv.innerHTML = `${alert.message}
+          <button type="button" class="close" data-dismiss="alert" aria-label="Close" onclick="closeAlert(${index})">
+            <span aria-hidden="true">&times;</span>
+          </button>`;
+        alertsContainer.appendChild(alertDiv);
+      });
+    }
+
+    function closeAlert(index) {
+      alerts.splice(index, 1);
+      renderAlerts();
+    }
+
+    function handleEdit(rowIndex) {
+      isEditing = true;
+      editedRow = rowIndex;
+      renderDataList();
+    }
+
+    function handleSave() {
+      isEditing = false;
+      editedRow = null;
+      renderDataList();
+    }
+
+    function handleChange(e, rowIndex) {
+      const { name, value } = e.target;
+      dataList[rowIndex][name] = value;
+    }
+
+    function handleDelete(rowIndex) {
+      dataList.splice(rowIndex, 1);
+      editedRow = null;
+      showAlert('Row deleted successfully!', 'success');
+      renderDataList();
+    }
+
+    function handleDownload(rowIndex) {
+      if (rowIndex < 0 || rowIndex >= dataList.length) {
+        showAlert('Invalid row index.');
+        return;
+      }
+      const specificData = dataList[rowIndex];
+      const jsonData = JSON.stringify(specificData, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `user_info_${rowIndex + 1}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showAlert(`File downloaded successfully: user_info_${rowIndex + 1}.json`, 'success');
+    }
+
+    function handleDownloadAll() {
+      if (dataList.length === 0) {
+        showAlert('No data to download.', 'danger');
+        return;
+      }
+      const allDataJson = JSON.stringify(dataList, null, 2);
+      const allDataBlob = new Blob([allDataJson], { type: 'application/json' });
+      const allDataURL = URL.createObjectURL(allDataBlob);
+      const a = document.createElement('a');
+      a.href = allDataURL;
+      a.download = 'all_user_info.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(allDataURL);
+      showAlert('All data downloaded successfully: all_user_info.json', 'success');
+    }
+
+    function handleFileUpload(e) {
+      const files = e.target.files;
+      if (files.length === 0) {
+        showAlert('Please select at least one file.', 'danger');
+        return;
+      }
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type !== 'application/json') {
+          showAlert(`File '${file.name}' is not a valid JSON file.`, 'danger');
+          continue;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const uploadedData = JSON.parse(event.target.result);
+            if (Object.values(uploadedData).some((value) => value === '')) {
+              showAlert(`File '${file.name}' contains empty values. Please upload a file with non-empty values.`, 'danger');
+              return;
+            }
+            dataList.push(uploadedData);
+            renderDataList();
+          } catch (error) {
+            console.error('Error parsing JSON file:', error);
+            showAlert(`Error parsing JSON file '${file.name}'.`, 'danger');
+          }
+        };
+        reader.readAsText(file);
+      }
+    }
+
+    function renderDataList() {
+      const dataListContainer = document.getElementById('dataList');
+      dataListContainer.innerHTML = '';
+      dataList.forEach((data, rowIndex) => {
+        const row = document.createElement('tr');
+        Object.entries(data).forEach(([key, value]) => {
+          const cell = document.createElement('td');
+          if (isEditing && editedRow === rowIndex) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control';
+            input.name = key;
+            input.value = value;
+            input.addEventListener('input', (e) => handleChange(e, rowIndex));
+            cell.appendChild(input);
+          } else {
+            cell.textContent = value;
+          }
+          row.appendChild(cell);
+        });
+        const actionsCell = document.createElement('td');
+        if (isEditing && editedRow === rowIndex) {
+          const saveButton = document.createElement('button');
+          saveButton.className = 'btn btn-primary btn-sm';
+          saveButton.textContent = 'Save';
+          saveButton.addEventListener('click', handleSave);
+          actionsCell.appendChild(saveButton);
+        } else {
+          const editButton = document.createElement('button');
+          editButton.className = 'btn btn-info btn-sm';
+          editButton.innerHTML = '<i class="fas fa-edit"></i>';
+          editButton.addEventListener('click', () => handleEdit(rowIndex));
+          actionsCell.appendChild(editButton);
+
+          const deleteButton = document.createElement('button');
+          deleteButton.className = 'btn btn-danger btn-sm ml-2';
+          deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+          deleteButton.addEventListener('click', () => handleDelete(rowIndex));
+          deleteButton.disabled = isEditing;
+          actionsCell.appendChild(deleteButton);
+
+          const downloadButton = document.createElement('button');
+          downloadButton.className = 'btn btn-success btn-sm ml-2';
+          downloadButton.innerHTML = '<i class="fas fa-download"></i>';
+          downloadButton.addEventListener('click', () => handleDownload(rowIndex));
+          downloadButton.disabled = isEditing;
+          actionsCell.appendChild(downloadButton);
+        }
+        row.appendChild(actionsCell);
+        dataListContainer.appendChild(row);
+      });
+    }
+
+    renderDataList();
+
+    console.log(dataList);
+
+    document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+  });
+</script>
+
+</body>
+</html>
